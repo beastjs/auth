@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { createRunContext, type RunContext } from '../src/context'
 import type { CommandRunner } from '../src/exec'
+import { FirebaseApi } from '../src/google/firebase-api'
+import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient, HttpResponse } from '../src/http'
 import { getAuthorizedDomains, isGoogleProviderEnabled } from '../src/google/identity-probe'
 import { runManualTask } from '../src/manual'
@@ -17,12 +19,14 @@ const noopRunner: CommandRunner = {
 function fakeHttp(replies: HttpResponse[]): HttpClient & { urls: string[] } {
   const urls: string[] = []
   let index = 0
-  const next = (url: string) => {
-    urls.push(url)
-    return Promise.resolve(replies[Math.min(index++, replies.length - 1)] as HttpResponse)
-  }
 
-  return { urls, getJson: next, postJson: (url) => next(url) }
+  return {
+    urls,
+    async request({ url }) {
+      urls.push(url)
+      return replies[Math.min(index++, replies.length - 1)] as HttpResponse
+    }
+  }
 }
 
 const ok = (body: unknown): HttpResponse => ({ status: 200, ok: true, body })
@@ -33,11 +37,22 @@ const ENABLED = ok({ kind: 'identitytoolkit#CreateAuthUriResponse', authUri: 'ht
 /** Also captured live: this is the exact wording for a provider that is not configured. */
 const NOT_CONFIGURED = bad('OPERATION_NOT_ALLOWED : The identity provider configuration is not found.')
 
+const unusedTokens: TokenProvider = {
+  async getAccessToken() {
+    throw new Error('no token should be needed in this test')
+  },
+  async describe() {
+    return 'test'
+  }
+}
+
 function contextWith(http: HttpClient): RunContext {
   return createRunContext({
     mode: 'apply',
     runner: noopRunner,
     http,
+    tokens: unusedTokens,
+    api: new FirebaseApi(http, unusedTokens),
     openBrowser: false,
     app: {
       root: '/app',
@@ -54,7 +69,7 @@ function contextWith(http: HttpClient): RunContext {
       packageManager: 'bun'
     },
     tools: { firebase: null, gcloud: null, bun: null, wrangler: null },
-    consoles: []
+    flags: { noConsoles: true }
   })
 }
 

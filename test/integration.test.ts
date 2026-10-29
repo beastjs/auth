@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { createRunContext, type RunContext } from '../src/context'
 import { detectApp } from '../src/detect'
 import type { CommandRunner } from '../src/exec'
+import { FirebaseApi } from '../src/google/firebase-api'
+import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient } from '../src/http'
 import { codegenStep, envStep } from '../src/steps/wire'
 
@@ -25,10 +27,7 @@ const ADMIN_CREDENTIAL = {
 }
 
 const idleHttp: HttpClient = {
-  async getJson() {
-    throw new Error('no request should be made in this test')
-  },
-  async postJson() {
+  async request() {
     throw new Error('no request should be made in this test')
   }
 }
@@ -56,16 +55,27 @@ async function createFixtureApp(): Promise<string> {
   return root
 }
 
+const unusedTokens: TokenProvider = {
+  async getAccessToken() {
+    throw new Error('no token should be needed in this test')
+  },
+  async describe() {
+    return 'test'
+  }
+}
+
 async function contextFor(root: string): Promise<RunContext> {
   const app = await detectApp(root)
   const context = createRunContext({
     mode: 'apply',
     runner: idleRunner,
     http: idleHttp,
+    tokens: unusedTokens,
+    api: new FirebaseApi(idleHttp, unusedTokens),
     openBrowser: false,
     app,
     tools: { firebase: null, gcloud: null, bun: null, wrangler: null },
-    consoles: []
+    flags: { noConsoles: true }
   })
 
   context.projectId = WEB_CONFIG.projectId

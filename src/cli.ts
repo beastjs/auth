@@ -2,14 +2,16 @@
 import { parseArgs } from 'node:util'
 import pc from 'picocolors'
 import { toDisplayPath } from './codegen/emit'
-import { createRunContext, type ConsoleSpec, type RunContext, type RunMode } from './context'
+import { createRunContext, type RunContext, type RunMode } from './context'
 import { detectApp, detectTools, findBlockingProblems } from './detect'
 import { systemCommandRunner } from './exec'
+import { createTokenProvider, NoGoogleCredentialError } from './google/credential'
+import { FirebaseApi } from './google/firebase-api'
 import { systemHttpClient } from './http'
-import { FirebaseAuthExpiredError } from './google/firebase-cli'
 import * as ui from './prompts'
 import type { Step } from './step'
 import { authorizedDomainsStep, googleProviderStep } from './steps/auth-provider'
+import { consolesStep } from './steps/consoles'
 import { googleAuthStep, projectStep, webAppStep } from './steps/project'
 import { codegenStep, envStep, installStep, verifyStep } from './steps/wire'
 
@@ -29,19 +31,6 @@ Options
 `.trimStart()
 
 /**
- * The console presets.
- *
- * The claim each console verifies mirrors the reference app: `asgard` is the
- * god-tier surface, `admin` the staff one. They are presets rather than free
- * text because the claim names are part of the generated authorization model and
- * are refused by `isFirebaseCustomClaimName`, so they cannot be chosen loosely.
- */
-const CONSOLE_PRESETS: readonly ConsoleSpec[] = [
-  { label: 'asgard', claim: 'god', routePrefix: '/asgard' },
-  { label: 'admin', claim: 'admin', routePrefix: '/admin' }
-]
-
-/**
  * Order matters. The provider and the authorized domains come before anything
  * that signs a user in, because `auth/operation-not-allowed` and
  * `auth/unauthorized-domain` are exactly what a sign-in fails with when they are
@@ -51,6 +40,7 @@ const STEPS: readonly Step[] = [
   googleAuthStep,
   projectStep,
   webAppStep,
+  consolesStep,
   googleProviderStep,
   authorizedDomainsStep,
   installStep,
@@ -58,31 +48,6 @@ const STEPS: readonly Step[] = [
   codegenStep,
   verifyStep
 ]
-
-async function chooseConsoles(flag: string | undefined, none: boolean): Promise<readonly ConsoleSpec[]> {
-  if (none) return []
-
-  if (flag !== undefined) {
-    const wanted = flag.split(',').map((label) => label.trim().toLowerCase()).filter(Boolean)
-    const unknown = wanted.filter((label) => !CONSOLE_PRESETS.some((preset) => preset.label === label))
-    if (unknown.length > 0) {
-      throw new Error(`No preset for the console${unknown.length === 1 ? '' : 's'} ${unknown.join(', ')}.`)
-    }
-    return CONSOLE_PRESETS.filter((preset) => wanted.includes(preset.label))
-  }
-
-  const labels = await ui.multiselect(
-    'Which console subdomains? (space to toggle, enter to accept)',
-    CONSOLE_PRESETS.map((preset) => ({
-      value: preset.label,
-      label: preset.label,
-      hint: `verifies the \`${preset.claim}\` claim`
-    })),
-    CONSOLE_PRESETS.map((preset) => preset.label)
-  )
-
-  return CONSOLE_PRESETS.filter((preset) => labels.includes(preset.label))
-}
 
 /**
  * Runs the steps in order: detect, then plan, then apply.
@@ -208,32 +173,23 @@ async function main() {
     `${app.appSlug} — rsbuild + beast-tsrx${app.hasConvex ? ', Convex' : ''}${app.hasWranglerConfig ? ', Cloudflare Worker' : ''}`
   )
 
-  const consoles = mode === 'apply' ? await chooseConsoles(values.consoles, values['no-consoles']) : []
+  const tokens = createTokenProvider(systemCommandRunner)
+
   const context = createRunContext({
     mode,
     runner: systemCommandRunner,
     http: systemHttpClient,
+    tokens,
+    api: new FirebaseApi(systemHttpClient, tokens),
     openBrowser: !values['no-browser'],
     app,
     tools,
-    consoles
+    flags: {
+      consoles: values.consoles,
+      noConsoles: values['no-consoles'] === true,
+      rootDomain: values['root-domain']
+    }
   })
-
-  // Only asked when it changes something: each console's host is
-  // `<label>.<root>`, and that is what the authorized-domain check needs.
-  if (mode === 'apply' && consoles.length > 0) {
-    const answered =
-      values['root-domain'] ??
-      (await ui.text('What domain is the app served from? (Enter to skip)', {
-        placeholder: 'example.com',
-        validate: (value) =>
-          value.length === 0 || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(value.trim().toLowerCase())
-            ? undefined
-            : 'A bare domain, with no scheme and no path.'
-      }))
-
-    context.rootDomain = answered.trim().toLowerCase() || null
-  }
 
   const { pendingWrites } = await runSteps(context)
 
@@ -262,7 +218,7 @@ main().catch((error: unknown) => {
     return
   }
 
-  if (error instanceof FirebaseAuthExpiredError) {
+  if (error instanceof NoGoogleCredentialError) {
     ui.log.error(error.message)
     ui.outro(pc.red('Nothing was changed.'))
     process.exitCode = 1

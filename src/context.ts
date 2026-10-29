@@ -1,5 +1,7 @@
 import type { CommandRunner } from './exec'
 import type { HttpClient } from './http'
+import type { TokenProvider } from './google/credential'
+import type { FirebaseApi } from './google/firebase-api'
 
 /** What `firebase apps:sdkconfig web` gives back, named as the client template wants it. */
 export type FirebaseWebConfig = {
@@ -56,6 +58,13 @@ export type ExternalTools = {
 
 export type RunMode = 'apply' | 'dry-run' | 'check'
 
+/** The command-line answers, so a step can skip its own prompt. */
+export type RunFlags = {
+  readonly consoles?: string
+  readonly noConsoles: boolean
+  readonly rootDomain?: string
+}
+
 /** What a manual step ended up being, for the report at the end. */
 export type ManualRecord = {
   readonly title: string
@@ -67,12 +76,15 @@ export type RunContext = {
   readonly mode: RunMode
   readonly runner: CommandRunner
   readonly http: HttpClient
+  readonly tokens: TokenProvider
+  readonly api: FirebaseApi
   /** Whether a manual step may open a browser. */
   readonly openBrowser: boolean
   readonly app: DetectedApp
   readonly tools: ExternalTools
-  /** Consoles the user chose. Empty is valid: Firebase without a console is a complete outcome. */
-  readonly consoles: readonly ConsoleSpec[]
+  readonly flags: RunFlags
+  /** Chosen part-way through the run. Empty is valid: Firebase without a console is a complete outcome. */
+  consoles: readonly ConsoleSpec[]
   /** Filled in by the project and web-app steps. */
   projectId: string | null
   webAppId: string | null
@@ -89,13 +101,17 @@ export function createRunContext(input: {
   mode: RunMode
   runner: CommandRunner
   http: HttpClient
+  tokens: TokenProvider
+  api: FirebaseApi
   openBrowser: boolean
   app: DetectedApp
   tools: ExternalTools
-  consoles: readonly ConsoleSpec[]
+  flags: RunFlags
+  consoles?: readonly ConsoleSpec[]
 }): RunContext {
   return {
     ...input,
+    consoles: input.consoles ?? [],
     projectId: null,
     webAppId: null,
     webConfig: null,

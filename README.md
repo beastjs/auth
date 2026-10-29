@@ -17,6 +17,7 @@ refuses politely when the directory is not a beast app.
   module, the component kit.
 - **Signs you in** to Firebase, and catches the common case where the stored
   credential has quietly expired (`firebase login --reauth`).
+- **Talks to the Google APIs over REST**, with the token that sign-in produced.
 - **Picks a project** — your existing projects first, then "create a new one".
 - **Registers a web app** (or reuses the one that is there) and reads its client
   config.
@@ -34,6 +35,22 @@ refuses politely when the directory is not a beast app.
 Console subdomains are prompted for and recorded, but the routing helpers, the
 Worker session routes and the pageholder pages are not generated yet. The run
 prints what is still yours to do.
+
+## Why REST and not the `firebase` CLI
+
+The CLI owns exactly one thing here: the browser sign-in. This tool never asks
+for a Google password and holds no refresh token of its own.
+
+Everything else — listing and creating projects, registering a web app, reading
+its config — goes straight to the Firebase Management API with the token that
+sign-in produced. `firebase-tools` 15.x fails on Node 26 with
+`InvalidArgumentError: invalid onError method` from undici, so every one of those
+commands errors out on a machine that has only current Node. Speaking to the API
+directly removes a whole class of version-skew failure and needs no extra
+credential.
+
+If the credential is missing, expired, or lacks the `cloud-platform` scope, the
+run says which and offers `firebase login --reauth`.
 
 ## Flags
 

@@ -16,6 +16,21 @@ function unwrap<T>(value: T | symbol): T {
 
 export type SelectOption<T> = { readonly value: T; readonly label: string; readonly hint?: string }
 
+/**
+ * Refuses to ask a question nobody can answer.
+ *
+ * In a non-interactive shell a prompt does not fail — it waits, forever, which
+ * wedges a CI job with no output to explain itself. Every question this CLI asks
+ * has a flag that answers it, so the refusal names the question and stops.
+ */
+function requireInteractive(message: string): void {
+  if (process.stdin.isTTY) return
+
+  throw new Error(
+    `Cannot ask "${message}" — this is not an interactive terminal. Pass the matching flag (see --help) instead.`
+  )
+}
+
 export const intro = (message: string) => clack.intro(message)
 export const outro = (message: string) => clack.outro(message)
 export const note = (body: string, title?: string) => clack.note(body, title)
@@ -23,6 +38,7 @@ export const log = clack.log
 export const spinner = clack.spinner
 
 export async function select<T>(message: string, options: readonly SelectOption<T>[]): Promise<T> {
+  requireInteractive(message)
   return unwrap(await clack.select({ message, options: [...options] as clack.Option<T>[] }))
 }
 
@@ -31,6 +47,7 @@ export async function multiselect<T>(
   options: readonly SelectOption<T>[],
   initialValues: readonly T[]
 ): Promise<T[]> {
+  requireInteractive(message)
   return unwrap(
     await clack.multiselect({
       message,
@@ -45,6 +62,7 @@ export async function text(
   message: string,
   options: { placeholder?: string; defaultValue?: string; validate?: (value: string) => string | undefined } = {}
 ): Promise<string> {
+  requireInteractive(message)
   return unwrap(
     await clack.text({
       message,
@@ -56,6 +74,7 @@ export async function text(
 }
 
 export async function confirm(message: string, initialValue = true): Promise<boolean> {
+  requireInteractive(message)
   return unwrap(await clack.confirm({ message, initialValue }))
 }
 

@@ -26,10 +26,14 @@ export async function isGoogleProviderEnabled(
   http: HttpClient,
   apiKey: string
 ): Promise<{ enabled: boolean; detail: string }> {
-  const response = await http.postJson(`${ENDPOINT}/accounts:createAuthUri?key=${encodeURIComponent(apiKey)}`, {
-    providerId: 'google.com',
-    // Required by the endpoint, and never navigated to: only the response is read.
-    continueUri: 'http://localhost'
+  const response = await http.request({
+    url: `${ENDPOINT}/accounts:createAuthUri?key=${encodeURIComponent(apiKey)}`,
+    method: 'POST',
+    body: {
+      providerId: 'google.com',
+      // Required by the endpoint, and never navigated to: only the response is read.
+      continueUri: 'http://localhost'
+    }
   })
 
   if (response.ok && typeof (response.body as AuthUriResponse | undefined)?.authUri === 'string') {
@@ -56,7 +60,7 @@ export async function isGoogleProviderEnabled(
  * than assuming.
  */
 export async function getAuthorizedDomains(http: HttpClient, apiKey: string): Promise<readonly string[] | null> {
-  const response = await http.getJson(`${ENDPOINT}/projects?key=${encodeURIComponent(apiKey)}`)
+  const response = await http.request({ url: `${ENDPOINT}/projects?key=${encodeURIComponent(apiKey)}` })
 
   if (!response.ok) return null
 

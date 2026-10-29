@@ -1,53 +1,54 @@
 import type { RunContext } from '../context'
-import {
-  createProject,
-  createWebApp,
-  getWebConfig,
-  isLoggedIn,
-  listProjects,
-  listWebApps,
-  reauthenticate
-} from '../google/firebase-cli'
+import { NoGoogleCredentialError } from '../google/credential'
+import { reauthenticate } from '../google/firebase-cli'
 import * as ui from '../prompts'
-import { emptyPlan, type Step, type StepPlan, type StepState } from '../step'
+import { emptyPlan, type Step } from '../step'
 
 const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/
 
-const suggestProjectId = (appSlug: string) =>
-  `${appSlug}-${Math.floor(Math.random() * 9000 + 1000)}`.slice(0, 30)
+const suggestProjectId = (appSlug: string) => `${appSlug}-${Math.floor(Math.random() * 9000 + 1000)}`.slice(0, 30)
 
 /**
- * Makes sure the stored Firebase credential still works before anything else
- * leans on it.
+ * Makes sure there is a working Google credential before anything leans on it.
  *
- * The CLI's refresh token expires on its own schedule, and every authenticated
- * command then fails with the same unhelpful shape. Catching it once, here,
- * turns four confusing failures later into one `firebase login --reauth`.
+ * The credential comes from `firebase login`, which owns that flow. This only
+ * checks it is present, unexpired and scoped, and hands the terminal back to the
+ * CLI when it is not — one clear step instead of four confusing failures later.
  */
 export const googleAuthStep: Step = {
   id: 'google.auth',
-  title: 'Firebase sign-in',
+  title: 'Google credential',
 
-  // `--check` is an offline drift check, usable as a package script and a CI
-  // gate, so it never probes a credential or reaches Google.
   skip: (context) => context.mode === 'check',
 
   async detect(context) {
-    return (await isLoggedIn(context.runner)) ? 'satisfied' : 'absent'
+    try {
+      await context.tokens.getAccessToken()
+    } catch {
+      return 'absent'
+    }
+
+    return (await context.api.isUsable()) ? 'satisfied' : 'absent'
   },
 
   async plan() {
-    return emptyPlan('Sign in to Firebase again — the stored credential has expired.')
+    return emptyPlan('Sign in to Firebase, so the Google APIs can be reached.')
   },
 
   async apply(context) {
-    ui.log.warn('Your Firebase credentials are no longer valid.')
+    try {
+      await context.tokens.getAccessToken()
+      ui.log.warn('The credential is present but the Firebase API refused it.')
+    } catch (error) {
+      ui.log.warn(error instanceof NoGoogleCredentialError ? error.message : 'No usable Google credential.')
+    }
+
     if (!(await ui.confirm('Run `firebase login --reauth` now?'))) throw new ui.UserAbort()
 
     await reauthenticate(context.runner)
 
-    if (!(await isLoggedIn(context.runner))) {
-      throw new Error('Firebase still reports an invalid credential, so nothing was changed.')
+    if (!(await context.api.isUsable())) {
+      throw new Error('The Google APIs still refuse this credential, so nothing was changed.')
     }
   }
 }
@@ -57,8 +58,6 @@ export const projectStep: Step = {
   id: 'firebase.project',
   title: 'Firebase project',
 
-  // `--check` is an offline drift check, usable as a package script and a CI
-  // gate, so it never probes a credential or reaches Google.
   skip: (context) => context.mode === 'check',
 
   async detect(context) {
@@ -76,17 +75,17 @@ export const projectStep: Step = {
   async apply(context) {
     const loading = ui.spinner()
     loading.start('Reading your Firebase projects')
-    const projects = await listProjects(context.runner)
+    const projects = await context.api.listProjects()
     loading.stop(`Found ${projects.length} project${projects.length === 1 ? '' : 's'}`)
 
-    const CREATE = Symbol('create')
-    const choice = await ui.select<string | typeof CREATE>('Which Firebase project?', [
+    const CREATE = '\u0000create'
+    const choice = await ui.select<string>('Which Firebase project?', [
+      { value: CREATE, label: 'Create a new project…' },
       ...projects.map((project) => ({
         value: project.projectId,
         label: project.projectId,
         hint: project.displayName
-      })),
-      { value: CREATE, label: 'Create a new project…' }
+      }))
     ])
 
     if (choice !== CREATE) {
@@ -94,19 +93,23 @@ export const projectStep: Step = {
       return
     }
 
+    const taken = new Set(projects.map((project) => project.projectId))
+
     const projectId = await ui.text('Project id', {
       defaultValue: suggestProjectId(context.app.appSlug),
       placeholder: suggestProjectId(context.app.appSlug),
-      validate: (value) =>
-        PROJECT_ID_PATTERN.test(value)
+      validate: (value) => {
+        if (taken.has(value)) return 'You already have a project with that id.'
+        return PROJECT_ID_PATTERN.test(value)
           ? undefined
           : 'Six to thirty characters: lowercase letters, digits and hyphens, starting with a letter.'
+      }
     })
     const displayName = await ui.text('Display name', { defaultValue: context.app.appSlug })
 
     const creating = ui.spinner()
-    creating.start(`Creating ${projectId}`)
-    const created = await createProject(context.runner, projectId, displayName)
+    creating.start(`Creating ${projectId} — this takes a minute`)
+    const created = await context.api.createProject(projectId, displayName)
     creating.stop(`Created ${created.projectId}`)
 
     context.projectId = created.projectId
@@ -117,21 +120,19 @@ export const projectStep: Step = {
  * Resolves the web app whose config the client reads.
  *
  * An existing web app is reused rather than duplicated: a project accumulates
- * them silently, and two apps for one site means two configs that can drift.
+ * them quietly, and two apps for one site means two configs that can drift.
  */
 export const webAppStep: Step = {
   id: 'firebase.webApp',
   title: 'Web app and client config',
 
-  // `--check` is an offline drift check, usable as a package script and a CI
-  // gate, so it never probes a credential or reaches Google.
   skip: (context) => context.mode === 'check',
 
-  async detect(context): Promise<StepState> {
+  async detect(context) {
     return context.webConfig === null ? 'absent' : 'satisfied'
   },
 
-  async plan(): Promise<StepPlan> {
+  async plan() {
     return emptyPlan('Register a web app (or reuse one) and read its client config.')
   },
 
@@ -141,7 +142,7 @@ export const webAppStep: Step = {
 
     const loading = ui.spinner()
     loading.start('Reading web apps')
-    const apps = await listWebApps(context.runner, projectId)
+    const apps = await context.api.listWebApps(projectId)
     loading.stop(`Found ${apps.length} web app${apps.length === 1 ? '' : 's'}`)
 
     let appId: string
@@ -149,7 +150,7 @@ export const webAppStep: Step = {
     if (apps.length === 0) {
       const creating = ui.spinner()
       creating.start('Registering a web app')
-      const created = await createWebApp(context.runner, projectId, context.app.appSlug)
+      const created = await context.api.createWebApp(projectId, context.app.appSlug)
       creating.stop(`Registered ${created.appId}`)
       appId = created.appId
     } else if (apps.length === 1 && apps[0] !== undefined) {
@@ -164,7 +165,7 @@ export const webAppStep: Step = {
 
     const reading = ui.spinner()
     reading.start('Reading the client config')
-    context.webConfig = await getWebConfig(context.runner, projectId, appId)
+    context.webConfig = await context.api.getWebConfig(projectId, appId)
     context.webAppId = appId
     reading.stop('Client config read')
   }

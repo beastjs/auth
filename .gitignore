@@ -9,3 +9,6 @@ sa.json
 .env
 .env.*
 !.env.example
+
+# firebase-tools drops this wherever it runs.
+firebase-debug.log
