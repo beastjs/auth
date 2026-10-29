@@ -1,25 +1,57 @@
 {
   "name": "@beastjs/auth",
   "version": "0.1.0",
-  "description": "Wire Firebase and firebase-admin into a beast app: project, auth, codegen, env, founder claims, console subdomains.",
+  "description": "Wire Firebase and firebase-admin into a Beast app: project, Google sign-in, codegen, env files, founder claims and console subdomains, in one interactive command.",
+  "keywords": [
+    "beast",
+    "btsx",
+    "tsrx",
+    "octane",
+    "firebase",
+    "firebase-admin",
+    "auth",
+    "custom-claims",
+    "cloudflare-workers",
+    "subdomain",
+    "rsbuild",
+    "codegen",
+    "cli"
+  ],
+  "license": "ISC",
+  "author": "phtn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beastjs/auth.git"
+  },
+  "homepage": "https://github.com/beastjs/auth#readme",
+  "bugs": {
+    "url": "https://github.com/beastjs/auth/issues"
+  },
   "type": "module",
-  "license": "MIT",
   "bin": {
     "beast-auth": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11.0"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --target node --outdir dist --format esm --external firebase-admin --external @clack/prompts --external picocolors",
     "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --target node --outdir dist --format esm --external firebase-admin --external @clack/prompts --external picocolors",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "check": "bun run typecheck && bun test"
+    "check": "bun run typecheck && bun test",
+    "proof": "bun run tools/compile-proof.ts",
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run check"
   },
   "dependencies": {
     "@clack/prompts": "0.11.0",

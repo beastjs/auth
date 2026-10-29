@@ -87,6 +87,15 @@ One assertion is worth more than the rest: the console dispatch must precede the
 static asset fallback. A Worker that serves assets first answers every console
 endpoint with the SPA shell, and the symptom points nowhere near the cause.
 
+## Install size
+
+`firebase-admin` is a real dependency and brings `@google-cloud` with it, so the
+tree lands around 80 MB. That is paid for one step: granting the founder claims.
+
+It is deliberate. `verifyIdToken` does genuine cryptographic verification of the
+ID token against Google's JWKS before anything is granted, and substituting a
+REST lookup for that would be a weaker stand-in for security-critical work.
+
 ## Why REST and not the `firebase` CLI
 
 The CLI owns exactly one thing here: the browser sign-in. This tool never asks
