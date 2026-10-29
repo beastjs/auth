@@ -16,6 +16,25 @@ function unwrap<T>(value: T | symbol): T {
 
 export type SelectOption<T> = { readonly value: T; readonly label: string; readonly hint?: string }
 
+let interactiveOverride: boolean | null = null
+
+/**
+ * Whether there is somebody who can answer a question.
+ *
+ * Read through here rather than from `process.stdin.isTTY` at each call site, so
+ * it is one property of the run instead of ambient state consulted in several
+ * places — and so a test can pin it. A test that reads the real terminal passes
+ * or hangs depending on where it runs, which is not a test.
+ */
+export function isInteractive(): boolean {
+  return interactiveOverride ?? process.stdin.isTTY === true
+}
+
+/** Pins interactivity. `null` restores the real terminal. Tests and `--yes` use this. */
+export function setInteractive(value: boolean | null): void {
+  interactiveOverride = value
+}
+
 /**
  * Refuses to ask a question nobody can answer.
  *
@@ -24,7 +43,7 @@ export type SelectOption<T> = { readonly value: T; readonly label: string; reado
  * has a flag that answers it, so the refusal names the question and stops.
  */
 function requireInteractive(message: string): void {
-  if (process.stdin.isTTY) return
+  if (isInteractive()) return
 
   throw new Error(
     `Cannot ask "${message}" — this is not an interactive terminal. Pass the matching flag (see --help) instead.`
@@ -90,8 +109,8 @@ export async function confirm(message: string, initialValue = true): Promise<boo
  * carries on.
  */
 export async function pause(message = 'Press Enter to continue'): Promise<void> {
-  if (!process.stdin.isTTY) {
-    log.warn(`${message} — skipped, this is not an interactive terminal.`)
+  if (!isInteractive()) {
+    log.warn(`${message} — skipped, nothing here can answer.`)
     return
   }
 

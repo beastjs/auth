@@ -1,11 +1,22 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { createRunContext, type RunContext, type RunFlags } from '../src/context'
 import type { CommandRunner } from '../src/exec'
 import { FirebaseApi } from '../src/google/firebase-api'
 import { IamApi } from '../src/google/iam'
 import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient } from '../src/http'
+import { setInteractive } from '../src/prompts'
 import { CONSOLE_PRESETS, consolesStep } from '../src/steps/consoles'
+
+// Pinned, not read from the terminal: a test that asks the real stdin passes
+// here and hangs under a pty, which is not a test at all.
+beforeAll(() => {
+  setInteractive(false)
+})
+
+afterAll(() => {
+  setInteractive(null)
+})
 
 const unusedRunner: CommandRunner = {
   async run() {
@@ -121,7 +132,7 @@ describe('consolesStep', () => {
   })
 })
 
-describe('prompting without a terminal', () => {
+describe('prompting with nobody to answer', () => {
   test('refuses rather than hanging, and points at --help', async () => {
     // No --root-domain, so the step would have to ask. In a non-interactive
     // shell that used to wait forever.

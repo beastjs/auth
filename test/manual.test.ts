@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { createRunContext, type RunContext } from '../src/context'
 import type { CommandRunner } from '../src/exec'
 import { FirebaseApi } from '../src/google/firebase-api'
@@ -7,6 +7,17 @@ import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient, HttpResponse } from '../src/http'
 import { getAuthorizedDomains, isGoogleProviderEnabled } from '../src/google/identity-probe'
 import { runManualTask } from '../src/manual'
+import { setInteractive } from '../src/prompts'
+
+// Pinned, not read from the terminal: a test that asks the real stdin passes
+// here and hangs under a pty, which is not a test at all.
+beforeAll(() => {
+  setInteractive(false)
+})
+
+afterAll(() => {
+  setInteractive(null)
+})
 
 const noopRunner: CommandRunner = {
   async run() {

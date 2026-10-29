@@ -34,6 +34,23 @@ describe('the process boundary', () => {
   })
 })
 
+describe('the terminal boundary', () => {
+  test('only prompts.ts reads whether stdin is a terminal', async () => {
+    const offenders: string[] = []
+
+    for (const path of await sourceFiles(SOURCE_ROOT)) {
+      const relativePath = relative(SOURCE_ROOT, path)
+      if (relativePath === 'prompts.ts') continue
+      if (relativePath.startsWith('codegen/templates')) continue
+      if ((await readFile(path, 'utf8')).includes('stdin.isTTY')) offenders.push(relativePath)
+    }
+
+    // Read in one place, so it is a property of the run that a test can pin
+    // rather than ambient state consulted in several.
+    expect(offenders).toEqual([])
+  })
+})
+
 describe('toAppSlug', () => {
   test('drops a scope but keeps the leaf, which is what names the cookie', () => {
     expect(toAppSlug('@beastjs/lucky-pick')).toBe('lucky-pick')

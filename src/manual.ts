@@ -80,7 +80,7 @@ export async function runManualTask(context: RunContext, task: ManualTask): Prom
     if (attempt === MAX_ATTEMPTS) break
     // Nobody is there to answer in a non-interactive shell, and asking would
     // hang the job. One check, then move on and report it.
-    if (!process.stdin.isTTY) return 'skipped'
+    if (!ui.isInteractive()) return 'skipped'
     if (!(await ui.confirm('Check again?'))) return 'skipped'
   }
 
