@@ -29,7 +29,7 @@
   },
   "type": "module",
   "bin": {
-    "beast-auth": "./dist/cli.js"
+    "beast-auth": "dist/cli.js"
   },
   "files": [
     "dist",
