@@ -12,6 +12,13 @@ export type StepState = 'satisfied' | 'partial' | 'absent'
 export type FileWrite = {
   readonly path: string
   readonly contents: string
+  /**
+   * A seeded file is written once and never overwritten, and `--check` ignores
+   * it. Pageholders, stylesheets and anything else the user is expected to grow
+   * are seeded; everything the tool owns is not. Without this distinction the
+   * second run would discard a half-built console UI.
+   */
+  readonly seeded?: boolean
 }
 
 export type StepPlan = {

@@ -15,5 +15,8 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  // Fixtures are inputs to the edit tests, not code this project compiles:
+  // they import the reference app's dependencies, which are not here.
+  "exclude": ["test/fixtures"]
 }

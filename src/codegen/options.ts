@@ -6,6 +6,8 @@ export type TemplateOptions = {
   /** Whether `convex` is a dependency — decides if Convex-only code is emitted at all. */
   readonly hasConvex: boolean
   readonly consoles: readonly ConsoleSpec[]
+  /** The domain the app is served from, or null when it is not known yet. */
+  readonly rootDomain: string | null
 }
 
 /**

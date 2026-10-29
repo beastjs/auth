@@ -31,6 +31,9 @@ export async function emitFile(write: FileWrite): Promise<WriteOutcome> {
   const existing = await readIfPresent(write.path)
   if (existing === write.contents) return 'unchanged'
 
+  // A seeded file that already exists is the user's work now.
+  if (write.seeded === true && existing !== null) return 'unchanged'
+
   await mkdir(dirname(write.path), { recursive: true })
   await writeFile(write.path, write.contents, 'utf8')
 
@@ -54,18 +57,29 @@ export async function emitAll(writes: readonly FileWrite[]): Promise<Map<string,
  * file the user has since edited is not this function's call to make.
  */
 export async function detectWrites(writes: readonly FileWrite[]): Promise<StepState> {
-  if (writes.length === 0) return 'satisfied'
+  // A seeded file is expected to diverge, so it says nothing about drift.
+  const owned = writes.filter((write) => write.seeded !== true)
+  const seeded = writes.filter((write) => write.seeded === true)
+
+  if (owned.length === 0 && seeded.length === 0) return 'satisfied'
+
+  // A seeded file that is simply absent still needs writing once.
+  for (const write of seeded) {
+    if ((await readIfPresent(write.path)) === null) return owned.length === 0 ? 'absent' : 'partial'
+  }
+
+  if (owned.length === 0) return 'satisfied'
 
   let matching = 0
   let present = 0
 
-  for (const write of writes) {
+  for (const write of owned) {
     const existing = await readIfPresent(write.path)
     if (existing !== null) present += 1
     if (existing === write.contents) matching += 1
   }
 
-  if (matching === writes.length) return 'satisfied'
+  if (matching === owned.length) return 'satisfied'
   if (present === 0) return 'absent'
   return 'partial'
 }

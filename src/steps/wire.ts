@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { buildConsoleManifest } from '../codegen/console-manifest'
 import { buildFirebaseManifest } from '../codegen/manifest'
+import type { TemplateOptions } from '../codegen/options'
 import { detectWrites, emitAll, toDisplayPath } from '../codegen/emit'
 import type { RunContext } from '../context'
 import { buildEnvWrites } from '../env-file'
@@ -8,10 +10,11 @@ import { runOrThrow } from '../exec'
 import * as ui from '../prompts'
 import { emptyPlan, type Step, type StepPlan } from '../step'
 
-const templateOptions = (context: RunContext) => ({
+const templateOptions = (context: RunContext): TemplateOptions => ({
   appSlug: context.app.appSlug,
   hasConvex: context.app.hasConvex,
-  consoles: context.consoles
+  consoles: context.consoles,
+  rootDomain: context.rootDomain
 })
 
 async function envWrites(context: RunContext) {
@@ -78,18 +81,26 @@ export const installStep: Step = {
 }
 
 /** Emits the firebase and firebase-admin libraries, plus their tests. */
+const allWrites = (context: RunContext) => {
+  const options = templateOptions(context)
+
+  return [...buildFirebaseManifest(context.app.root, options), ...buildConsoleManifest(context.app.root, options)]
+}
+
 export const codegenStep: Step = {
   id: 'codegen.firebase',
-  title: 'lib/firebase and lib/firebase-admin',
+  title: 'Firebase and console modules',
 
   async detect(context) {
-    return await detectWrites(buildFirebaseManifest(context.app.root, templateOptions(context)))
+    return await detectWrites(allWrites(context))
   },
 
   async plan(context): Promise<StepPlan> {
-    const writes = buildFirebaseManifest(context.app.root, templateOptions(context))
+    const writes = allWrites(context)
+    const seeded = writes.filter((write) => write.seeded === true).length
+
     return {
-      summary: `Generate ${writes.length} files under src/lib and scripts.`,
+      summary: `Generate ${writes.length - seeded} files, and seed ${seeded} you can edit.`,
       writes,
       notes: []
     }

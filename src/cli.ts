@@ -12,6 +12,7 @@ import * as ui from './prompts'
 import type { Step } from './step'
 import { authorizedDomainsStep, googleProviderStep } from './steps/auth-provider'
 import { consolesStep } from './steps/consoles'
+import { editsStep } from './steps/edits'
 import { googleAuthStep, projectStep, webAppStep } from './steps/project'
 import { codegenStep, envStep, installStep, verifyStep } from './steps/wire'
 
@@ -46,6 +47,7 @@ const STEPS: readonly Step[] = [
   installStep,
   envStep,
   codegenStep,
+  editsStep,
   verifyStep
 ]
 

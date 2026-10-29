@@ -30,11 +30,58 @@ refuses politely when the directory is not a beast app.
   co-located tests, and `scripts/firebase/seed-claims.ts`.
 - **Type-checks** the result against your app.
 
-## What it does not do yet
+- **Generates the consoles** you choose: host arithmetic, a session cookie and
+  its verification, Worker endpoints, a route tree picked by hostname, an access
+  gate, and pages to put in it.
+- **Wires them into the app**, with five marker-wrapped edits to files you own.
 
-Console subdomains are prompted for and recorded, but the routing helpers, the
-Worker session routes and the pageholder pages are not generated yet. The run
-prints what is still yours to do.
+## Consoles
+
+A console is a staff area on its own subdomain, separate from the app. Each one
+gets four things of its own: a subdomain label, a route tree the host picks at
+load, a session cookie, and the custom claim that admits a session.
+
+| | `asgard` | `admin` |
+| --- | --- | --- |
+| host | `asgard.<domain>` | `admin.<domain>` |
+| claim | `god` | `admin` |
+| path before DNS exists | `/asgard` | `/admin` |
+
+Picking none is a complete outcome — Firebase sign-in on its own is useful.
+
+Every console component stays behind `lazyRouteComponent`, so the main bundle
+never carries a console.
+
+### What gets written
+
+Owned by this tool, re-rendered every run and checked by `--check`:
+`src/lib/routing/*`, `src/lib/subdomains/*`, `src/lib/firebase-admin/*`,
+`src/lib/firebase/*`, `src/server/*`, `src/lib/consoles/route-trees.ts`,
+`src/lib/<console>/{access,dev-gate}.ts`, `scripts/firebase/seed-claims.ts`.
+
+Seeded once and then yours — never overwritten, and ignored by `--check`:
+`src/pages/<console>-page.btsx`, `src/pages/<console>-overview-page.btsx`,
+`src/styles/<console>.css`. Without that distinction a second run would discard
+a half-built console UI.
+
+### The five edits
+
+`src/worker.ts`, your router, `src/env.d.ts`, `wrangler.jsonc` and
+`package.json` are changed in place, each inside a
+`// beast-auth:<id> start` / `end` block or as one narrow replacement. A second
+run replaces the block byte for byte, so it is a true no-op.
+
+They stay small because the parts that grow — the API dispatch table and the
+route trees — are generated into files of their own.
+
+Each edit refuses rather than guesses. A router that already builds several
+trees, or a Worker with no recognisable handler, is reported with the exact
+lines to paste. Mangling a file you wrote is worse than asking you to add two
+lines.
+
+One assertion is worth more than the rest: the console dispatch must precede the
+static asset fallback. A Worker that serves assets first answers every console
+endpoint with the SPA shell, and the symptom points nowhere near the cause.
 
 ## Why REST and not the `firebase` CLI
 
@@ -90,17 +137,25 @@ bun run typecheck
 bun run build                                   # dist/cli.js, runs under node and bun
 
 bun run tools/extract-reference.ts ~/path/to/reference-app   # re-lift the templates
-bun run tools/compile-proof.ts ~/path/to/reference-app       # type-check generated output for real
+bun run tools/compile-proof.ts ~/path/to/reference-app       # prove the generated output for real
 ```
 
 `tools/extract-reference.ts` lifts the reference app's modules into
 `src/codegen/templates/`. Those templates are committed, so the reference app is
 a build-time input and never a runtime dependency.
 
-`tools/compile-proof.ts` generates a whole run into a throwaway directory and
-runs `tsc` against the reference app's real `firebase`, `firebase-admin`,
-`octane` and `convex` types. Snapshots prove the output has not changed; only a
-compiler proves it is valid.
+`tools/compile-proof.ts` is the real gate. It generates a whole run into a
+throwaway directory alongside a synthetic beast app, applies the five surgical
+edits twice, and then:
+
+- type-checks every generated `.ts` against the reference app's real `firebase`,
+  `firebase-admin`, `octane` and `convex` types;
+- compiles every generated `.btsx` with the actual beast compiler, because those
+  files are indentation-sensitive and emitted as text, so a template bug there is
+  a compiler error that `tsc` cannot see at all;
+- asserts the second edit pass changes nothing.
+
+Snapshots prove the output has not changed; only this proves it is correct.
 
 ## Architecture
 

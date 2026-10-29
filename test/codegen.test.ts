@@ -9,7 +9,8 @@ const render = (overrides: { hasConvex?: boolean; consoles?: readonly ConsoleSpe
   buildFirebaseManifest('/app', {
     appSlug: 'my-app',
     hasConvex: overrides.hasConvex ?? true,
-    consoles: overrides.consoles ?? []
+    consoles: overrides.consoles ?? [],
+    rootDomain: 'example.com'
   })
 
 const find = (writes: ReturnType<typeof render>, suffix: string) => {
