@@ -5,9 +5,11 @@ import { toDisplayPath } from './codegen/emit'
 import { createRunContext, type ConsoleSpec, type RunContext, type RunMode } from './context'
 import { detectApp, detectTools, findBlockingProblems } from './detect'
 import { systemCommandRunner } from './exec'
+import { systemHttpClient } from './http'
 import { FirebaseAuthExpiredError } from './google/firebase-cli'
 import * as ui from './prompts'
 import type { Step } from './step'
+import { authorizedDomainsStep, googleProviderStep } from './steps/auth-provider'
 import { googleAuthStep, projectStep, webAppStep } from './steps/project'
 import { codegenStep, envStep, installStep, verifyStep } from './steps/wire'
 
@@ -19,6 +21,8 @@ ${pc.bold('beast-auth')} — wire Firebase into a beast app
 Options
   --consoles <a,b>   Console subdomains to generate (default: prompted)
   --no-consoles      Firebase only, no console subdomains
+  --root-domain <d>  The domain the app is served from
+  --no-browser       Never open a browser for a manual step
   --dry-run          Show every file that would change, write nothing
   --check            Exit 1 when the generated files are out of date
   -h, --help         Print this
@@ -37,10 +41,18 @@ const CONSOLE_PRESETS: readonly ConsoleSpec[] = [
   { label: 'admin', claim: 'admin', routePrefix: '/admin' }
 ]
 
+/**
+ * Order matters. The provider and the authorized domains come before anything
+ * that signs a user in, because `auth/operation-not-allowed` and
+ * `auth/unauthorized-domain` are exactly what a sign-in fails with when they are
+ * not done — and both are manual steps the run has to wait for.
+ */
 const STEPS: readonly Step[] = [
   googleAuthStep,
   projectStep,
   webAppStep,
+  googleProviderStep,
+  authorizedDomainsStep,
   installStep,
   envStep,
   codegenStep,
@@ -111,16 +123,35 @@ async function runSteps(context: RunContext): Promise<{ pendingWrites: number }>
 }
 
 function reportNextSteps(context: RunContext) {
+  const unfinished = context.manual.filter((record) => record.outcome !== 'verified')
+
   const lines = [
     `Project      ${context.projectId ?? 'not set'}`,
-    `Console      https://console.firebase.google.com/project/${context.projectId ?? ''}/overview`,
+    `Console      https://console.firebase.google.com/project/${context.projectId ?? ''}/overview`
+  ]
+
+  const verified = context.manual.filter((record) => record.outcome === 'verified')
+  if (verified.length > 0) {
+    lines.push('', pc.bold('Confirmed'), ...verified.map((record) => `  \u2713 ${record.title}`))
+  }
+
+  if (unfinished.length > 0) {
+    lines.push(
+      '',
+      pc.bold('Not confirmed'),
+      ...unfinished.flatMap((record) => [
+        `  ${record.outcome === 'skipped' ? '\u2717' : '?'} ${record.title}`,
+        ...(record.url ? [pc.dim(`     ${record.url}`)] : [])
+      ])
+    )
+  }
+
+  lines.push(
     '',
     pc.bold('Still yours to do'),
-    '  1. Enable the Google provider:',
-    pc.dim(`     https://console.firebase.google.com/project/${context.projectId ?? ''}/authentication/providers`),
-    '  2. Grant yourself the founder claims once you can sign in:',
+    '  Grant yourself the founder claims once you can sign in:',
     pc.dim('     bun run fb:claims -- --email you@example.com --claims \'{"topg":true,"god":true,"admin":true}\' --merge')
-  ]
+  )
 
   if (context.consoles.length > 0) {
     lines.push(
@@ -141,6 +172,8 @@ async function main() {
     options: {
       consoles: { type: 'string' },
       'no-consoles': { type: 'boolean', default: false },
+      'root-domain': { type: 'string' },
+      'no-browser': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false }
@@ -176,7 +209,31 @@ async function main() {
   )
 
   const consoles = mode === 'apply' ? await chooseConsoles(values.consoles, values['no-consoles']) : []
-  const context = createRunContext({ mode, runner: systemCommandRunner, app, tools, consoles })
+  const context = createRunContext({
+    mode,
+    runner: systemCommandRunner,
+    http: systemHttpClient,
+    openBrowser: !values['no-browser'],
+    app,
+    tools,
+    consoles
+  })
+
+  // Only asked when it changes something: each console's host is
+  // `<label>.<root>`, and that is what the authorized-domain check needs.
+  if (mode === 'apply' && consoles.length > 0) {
+    const answered =
+      values['root-domain'] ??
+      (await ui.text('What domain is the app served from? (Enter to skip)', {
+        placeholder: 'example.com',
+        validate: (value) =>
+          value.length === 0 || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(value.trim().toLowerCase())
+            ? undefined
+            : 'A bare domain, with no scheme and no path.'
+      }))
+
+    context.rootDomain = answered.trim().toLowerCase() || null
+  }
 
   const { pendingWrites } = await runSteps(context)
 

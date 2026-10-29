@@ -1,4 +1,5 @@
 import type { CommandRunner } from './exec'
+import type { HttpClient } from './http'
 
 /** What `firebase apps:sdkconfig web` gives back, named as the client template wants it. */
 export type FirebaseWebConfig = {
@@ -55,9 +56,19 @@ export type ExternalTools = {
 
 export type RunMode = 'apply' | 'dry-run' | 'check'
 
+/** What a manual step ended up being, for the report at the end. */
+export type ManualRecord = {
+  readonly title: string
+  readonly outcome: 'verified' | 'assumed' | 'skipped'
+  readonly url?: string
+}
+
 export type RunContext = {
   readonly mode: RunMode
   readonly runner: CommandRunner
+  readonly http: HttpClient
+  /** Whether a manual step may open a browser. */
+  readonly openBrowser: boolean
   readonly app: DetectedApp
   readonly tools: ExternalTools
   /** Consoles the user chose. Empty is valid: Firebase without a console is a complete outcome. */
@@ -68,11 +79,17 @@ export type RunContext = {
   webConfig: FirebaseWebConfig | null
   adminCredential: FirebaseAdminCredential | null
   founderUid: string | null
+  /** The domain the app is served from, needed to name each console's host. */
+  rootDomain: string | null
+  /** Appended by every manual step, printed as the run's honest tail. */
+  readonly manual: ManualRecord[]
 }
 
 export function createRunContext(input: {
   mode: RunMode
   runner: CommandRunner
+  http: HttpClient
+  openBrowser: boolean
   app: DetectedApp
   tools: ExternalTools
   consoles: readonly ConsoleSpec[]
@@ -83,6 +100,8 @@ export function createRunContext(input: {
     webAppId: null,
     webConfig: null,
     adminCredential: null,
-    founderUid: null
+    founderUid: null,
+    rootDomain: null,
+    manual: []
   }
 }

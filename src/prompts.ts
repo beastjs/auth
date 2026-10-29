@@ -1,4 +1,5 @@
 import * as clack from '@clack/prompts'
+import pc from 'picocolors'
 
 export class UserAbort extends Error {
   constructor() {
@@ -56,4 +57,31 @@ export async function text(
 
 export async function confirm(message: string, initialValue = true): Promise<boolean> {
   return unwrap(await clack.confirm({ message, initialValue }))
+}
+
+/**
+ * Blocks until the user presses Enter.
+ *
+ * The manual steps are things only the user can do — clicking a toggle in a
+ * console, adding a DNS record — and the steps after them depend on the result,
+ * so the run waits rather than racing ahead and failing further down.
+ *
+ * In a non-interactive shell there is nobody to press anything. Blocking there
+ * would hang a CI job forever, so it says what it would have waited for and
+ * carries on.
+ */
+export async function pause(message = 'Press Enter to continue'): Promise<void> {
+  if (!process.stdin.isTTY) {
+    log.warn(`${message} — skipped, this is not an interactive terminal.`)
+    return
+  }
+
+  const readline = await import('node:readline/promises')
+  const io = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+  try {
+    await io.question(`${pc.cyan("│")}  ${message} `)
+  } finally {
+    io.close()
+  }
 }

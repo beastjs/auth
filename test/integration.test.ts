@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { createRunContext, type RunContext } from '../src/context'
 import { detectApp } from '../src/detect'
 import type { CommandRunner } from '../src/exec'
+import type { HttpClient } from '../src/http'
 import { codegenStep, envStep } from '../src/steps/wire'
 
 const WEB_CONFIG = {
@@ -21,6 +22,15 @@ const ADMIN_CREDENTIAL = {
   clientEmail: 'temp-app-admin@temp-app-345.iam.gserviceaccount.com',
   privateKey: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PRIVATE KEY-----\n',
   privateKeyId: 'keyid123'
+}
+
+const idleHttp: HttpClient = {
+  async getJson() {
+    throw new Error('no request should be made in this test')
+  },
+  async postJson() {
+    throw new Error('no request should be made in this test')
+  }
 }
 
 const idleRunner: CommandRunner = {
@@ -51,6 +61,8 @@ async function contextFor(root: string): Promise<RunContext> {
   const context = createRunContext({
     mode: 'apply',
     runner: idleRunner,
+    http: idleHttp,
+    openBrowser: false,
     app,
     tools: { firebase: null, gcloud: null, bun: null, wrangler: null },
     consoles: []
