@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Never let a service-account key land here.
+sa.json
+*-service-account.json
+.env
+.env.*
+!.env.example

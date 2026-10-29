@@ -1,0 +1,34 @@
+{
+  "name": "@beastjs/auth",
+  "version": "0.1.0",
+  "description": "Wire Firebase and firebase-admin into a beast app: project, auth, codegen, env, founder claims, console subdomains.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "beast-auth": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --target node --outdir dist --format esm --external firebase-admin --external @clack/prompts --external picocolors",
+    "dev": "bun run src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "@clack/prompts": "0.11.0",
+    "firebase-admin": "^14.5.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}
