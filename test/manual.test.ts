@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createRunContext, type RunContext } from '../src/context'
 import type { CommandRunner } from '../src/exec'
 import { FirebaseApi } from '../src/google/firebase-api'
+import { IamApi } from '../src/google/iam'
 import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient, HttpResponse } from '../src/http'
 import { getAuthorizedDomains, isGoogleProviderEnabled } from '../src/google/identity-probe'
@@ -53,6 +54,7 @@ function contextWith(http: HttpClient): RunContext {
     http,
     tokens: unusedTokens,
     api: new FirebaseApi(http, unusedTokens),
+    iam: new IamApi(http, unusedTokens),
     openBrowser: false,
     app: {
       root: '/app',

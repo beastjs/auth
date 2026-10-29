@@ -6,6 +6,7 @@ import { createRunContext, type RunContext } from '../src/context'
 import { detectApp } from '../src/detect'
 import type { CommandRunner } from '../src/exec'
 import { FirebaseApi } from '../src/google/firebase-api'
+import { IamApi } from '../src/google/iam'
 import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient } from '../src/http'
 import { codegenStep, envStep } from '../src/steps/wire'
@@ -72,6 +73,7 @@ async function contextFor(root: string): Promise<RunContext> {
     http: idleHttp,
     tokens: unusedTokens,
     api: new FirebaseApi(idleHttp, unusedTokens),
+    iam: new IamApi(idleHttp, unusedTokens),
     openBrowser: false,
     app,
     tools: { firebase: null, gcloud: null, bun: null, wrangler: null },

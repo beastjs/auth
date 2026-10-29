@@ -7,12 +7,15 @@ import { detectApp, detectTools, findBlockingProblems } from './detect'
 import { systemCommandRunner } from './exec'
 import { createTokenProvider, NoGoogleCredentialError } from './google/credential'
 import { FirebaseApi } from './google/firebase-api'
+import { IamApi } from './google/iam'
 import { systemHttpClient } from './http'
 import * as ui from './prompts'
 import type { Step } from './step'
 import { authorizedDomainsStep, googleProviderStep } from './steps/auth-provider'
 import { consolesStep } from './steps/consoles'
 import { editsStep } from './steps/edits'
+import { founderStep } from './steps/founder'
+import { serviceAccountStep } from './steps/service-account'
 import { googleAuthStep, projectStep, webAppStep } from './steps/project'
 import { codegenStep, envStep, installStep, verifyStep } from './steps/wire'
 
@@ -44,10 +47,14 @@ const STEPS: readonly Step[] = [
   consolesStep,
   googleProviderStep,
   authorizedDomainsStep,
+  serviceAccountStep,
   installStep,
   envStep,
   codegenStep,
   editsStep,
+  // After the env files and the codegen, so the by-hand fallback it prints
+  // (`bun run fb:claims`) actually exists by the time it is needed.
+  founderStep,
   verifyStep
 ]
 
@@ -183,6 +190,7 @@ async function main() {
     http: systemHttpClient,
     tokens,
     api: new FirebaseApi(systemHttpClient, tokens),
+    iam: new IamApi(systemHttpClient, tokens),
     openBrowser: !values['no-browser'],
     app,
     tools,

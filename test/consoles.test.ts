@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createRunContext, type RunContext, type RunFlags } from '../src/context'
 import type { CommandRunner } from '../src/exec'
 import { FirebaseApi } from '../src/google/firebase-api'
+import { IamApi } from '../src/google/iam'
 import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient } from '../src/http'
 import { CONSOLE_PRESETS, consolesStep } from '../src/steps/consoles'
@@ -37,6 +38,7 @@ function contextWith(flags: RunFlags): RunContext {
     http: unusedHttp,
     tokens: unusedTokens,
     api: new FirebaseApi(unusedHttp, unusedTokens),
+    iam: new IamApi(unusedHttp, unusedTokens),
     openBrowser: false,
     app: {
       root: '/app',

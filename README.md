@@ -34,6 +34,10 @@ refuses politely when the directory is not a beast app.
   its verification, Worker endpoints, a route tree picked by hostname, an access
   gate, and pages to put in it.
 - **Wires them into the app**, with five marker-wrapped edits to files you own.
+- **Mints the Admin SDK key** and writes only the four discrete variables — there
+  is no `sa.json`, ever.
+- **Signs you in with Google** in your own browser and grants you the founder
+  claims.
 
 ## Consoles
 
@@ -107,6 +111,47 @@ run says which and offers `firebase login --reauth`.
 | `--no-consoles` | Firebase only |
 | `--dry-run` | Print every file that would change; write nothing |
 | `--check` | Exit 1 when the generated files are out of date. Fully offline — no credential probe, no network. Usable as a package script and a CI gate |
+
+## The founder account
+
+The CLI serves one page on an ephemeral `localhost` port, opens your browser, and
+waits. You click *Continue with Google*; the sign-in happens in your browser and
+the CLI only ever receives the resulting ID token. No password is typed into it
+and no credential is stored.
+
+It then verifies that token with the Admin SDK and grants
+`{ topg: true, god: true, admin: true }`. `topg` is not optional: only `topg` may
+hand out `god` or `admin`, so without it the app would be a one-person system
+with no way to add the second person.
+
+Claims are **merged**, never replaced — an account may carry claims this tool
+knows nothing about. Refresh tokens are deliberately not revoked, since that
+would invalidate the token just used. The result is read back and printed, rather
+than reporting what was sent.
+
+The server binds `127.0.0.1` but sends your browser to `localhost`: `localhost`
+is in Firebase's default authorized-domain list and authorization is per-host,
+not per-port, which is what lets an ephemeral port work with no setup. The page
+is gated by a single-use nonce, checks `Origin` and `Sec-Fetch-Site`, sends no
+CORS headers, shuts down the instant it has the token, and gives up after five
+minutes with the by-hand command printed.
+
+It also names the two errors that actually happen there —
+`auth/operation-not-allowed` and `auth/unauthorized-domain` — because those are
+the symptoms of the two steps the CLI cannot do for you.
+
+## The service-account key
+
+Firebase's own `firebase-adminsdk-*` account is used when it exists, because
+Firebase already granted it what the Admin SDK needs — which avoids a
+`setIamPolicy` call, the step most likely to be refused by an organization
+policy. Otherwise a dedicated `<app>-admin` account is created and granted
+`roles/firebaseauth.admin`.
+
+The key is returned by the API as base64, decoded in memory, and written out as
+`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` and
+`FIREBASE_PRIVATE_KEY_ID` into gitignored files. It is never written as a file
+and never printed.
 
 ## Things that cannot be automated
 

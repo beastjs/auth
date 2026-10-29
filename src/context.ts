@@ -2,6 +2,7 @@ import type { CommandRunner } from './exec'
 import type { HttpClient } from './http'
 import type { TokenProvider } from './google/credential'
 import type { FirebaseApi } from './google/firebase-api'
+import type { IamApi } from './google/iam'
 
 /** What `firebase apps:sdkconfig web` gives back, named as the client template wants it. */
 export type FirebaseWebConfig = {
@@ -78,6 +79,7 @@ export type RunContext = {
   readonly http: HttpClient
   readonly tokens: TokenProvider
   readonly api: FirebaseApi
+  readonly iam: IamApi
   /** Whether a manual step may open a browser. */
   readonly openBrowser: boolean
   readonly app: DetectedApp
@@ -103,6 +105,7 @@ export function createRunContext(input: {
   http: HttpClient
   tokens: TokenProvider
   api: FirebaseApi
+  iam: IamApi
   openBrowser: boolean
   app: DetectedApp
   tools: ExternalTools
