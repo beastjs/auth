@@ -77,12 +77,22 @@ export async function multiselect<T>(
   )
 }
 
+/**
+ * Asks for a line of text. Empty input is an empty string, never `undefined`.
+ *
+ * That coercion is the whole point of this wrapper. `@clack/core`'s TextPrompt
+ * finalizes with `this.value || (this.value = opts.defaultValue)`, so a prompt
+ * with no `defaultValue` resolves to `undefined` when the person just presses
+ * Enter — while its declared type says `string`. Every caller then looks correct
+ * and crashes on the first `.trim()`.
+ */
 export async function text(
   message: string,
   options: { placeholder?: string; defaultValue?: string; validate?: (value: string) => string | undefined } = {}
 ): Promise<string> {
   requireInteractive(message)
-  return unwrap(
+
+  const answer = unwrap<string | undefined>(
     await clack.text({
       message,
       placeholder: options.placeholder,
@@ -90,6 +100,8 @@ export async function text(
       validate: (value) => options.validate?.(value ?? '')
     })
   )
+
+  return answer ?? ''
 }
 
 export async function confirm(message: string, initialValue = true): Promise<boolean> {

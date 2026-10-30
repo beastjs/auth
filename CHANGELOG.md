@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.1
+
+Three bugs on the create-a-project path, all reported from a real run.
+
+- **Selecting a project then skipping the domain crashed** with
+  `Cannot read properties of undefined (reading 'trim')`. `@clack/core`'s
+  TextPrompt finalizes with `this.value || (this.value = opts.defaultValue)`, so
+  a prompt with no `defaultValue` resolves to `undefined` when you press Enter —
+  while its declared type says `string`. `text()` now always returns a string,
+  and the domain answer goes through a tested `normalizeRootDomain`.
+- **The suggested project id could not be accepted by pressing Enter.** Its
+  validator rejected empty input, which made the `defaultValue` it offers
+  unreachable: the only way to use the suggestion was to retype it.
+- **The suggested id shown was not the one submitted.** `defaultValue` and
+  `placeholder` each called a random generator, so they disagreed.
+
 ## 0.1.0
 
 First release. Wires Firebase into a Beast app in one interactive command.

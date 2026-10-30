@@ -9,6 +9,24 @@ const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/
 const suggestProjectId = (appSlug: string) => `${appSlug}-${Math.floor(Math.random() * 9000 + 1000)}`.slice(0, 30)
 
 /**
+ * Checks a typed project id, or accepts nothing at all.
+ *
+ * Empty passes deliberately: the prompt carries a suggested id as its
+ * `defaultValue`, and rejecting empty would make that suggestion impossible to
+ * accept — the person would have to type it out by hand to use it.
+ */
+export function validateProjectId(value: string, taken: ReadonlySet<string>): string | undefined {
+  const candidate = value.trim()
+
+  if (candidate.length === 0) return undefined
+  if (taken.has(candidate)) return 'You already have a project with that id.'
+
+  return PROJECT_ID_PATTERN.test(candidate)
+    ? undefined
+    : 'Six to thirty characters: lowercase letters, digits and hyphens, starting with a letter.'
+}
+
+/**
  * Makes sure there is a working Google credential before anything leans on it.
  *
  * The credential comes from `firebase login`, which owns that flow. This only
@@ -95,21 +113,25 @@ export const projectStep: Step = {
 
     const taken = new Set(projects.map((project) => project.projectId))
 
+    // Suggested once: `suggestProjectId` is random, so calling it for both the
+    // default and the placeholder would show one id and submit another.
+    const suggestion = suggestProjectId(context.app.appSlug)
+
     const projectId = await ui.text('Project id', {
-      defaultValue: suggestProjectId(context.app.appSlug),
-      placeholder: suggestProjectId(context.app.appSlug),
-      validate: (value) => {
-        if (taken.has(value)) return 'You already have a project with that id.'
-        return PROJECT_ID_PATTERN.test(value)
-          ? undefined
-          : 'Six to thirty characters: lowercase letters, digits and hyphens, starting with a letter.'
-      }
+      defaultValue: suggestion,
+      placeholder: suggestion,
+      validate: (value) => validateProjectId(value, taken)
     })
+
     const displayName = await ui.text('Display name', { defaultValue: context.app.appSlug })
 
+    if (projectId.trim().length === 0 || displayName.trim().length === 0) {
+      throw new Error('A project needs an id and a display name.')
+    }
+
     const creating = ui.spinner()
-    creating.start(`Creating ${projectId} — this takes a minute`)
-    const created = await context.api.createProject(projectId, displayName)
+    creating.start(`Creating ${projectId.trim()} — this takes a minute`)
+    const created = await context.api.createProject(projectId.trim(), displayName.trim())
     creating.stop(`Created ${created.projectId}`)
 
     context.projectId = created.projectId

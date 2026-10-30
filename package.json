@@ -1,6 +1,6 @@
 {
   "name": "@beastjs/auth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wire Firebase and firebase-admin into a Beast app: project, Google sign-in, codegen, env files, founder claims and console subdomains, in one interactive command.",
   "keywords": [
     "beast",

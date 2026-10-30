@@ -36,6 +36,20 @@ function fromFlag(flag: string): readonly ConsoleSpec[] {
 const DOMAIN_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/
 
 /**
+ * Turns whatever the domain prompt produced into a domain or nothing.
+ *
+ * Skipping is a real answer — the consoles still generate, they just have no
+ * host to name yet — so an empty answer is `null` rather than an error. Takes
+ * `undefined` because a skipped prompt used to produce exactly that, and the
+ * crash it caused is the reason this is a function with tests.
+ */
+export function normalizeRootDomain(answer: string | undefined): string | null {
+  const trimmed = (answer ?? '').trim().toLowerCase()
+
+  return trimmed.length > 0 ? trimmed : null
+}
+
+/**
  * Asks which staff consoles the app should have, and on what domain.
  *
  * It runs after the project is settled rather than first, because "which
@@ -103,11 +117,14 @@ async function chooseRootDomain(context: RunContext): Promise<string | null> {
     context.flags.rootDomain ??
     (await ui.text('What domain is the app served from? (Enter to skip)', {
       placeholder: 'example.com',
+      // Empty passes: skipping is allowed, and `defaultValue` is left unset so
+      // the placeholder is not mistaken for an answer.
+      defaultValue: '',
       validate: (value) =>
-        value.length === 0 || DOMAIN_PATTERN.test(value.trim().toLowerCase())
+        value.trim().length === 0 || DOMAIN_PATTERN.test(value.trim().toLowerCase())
           ? undefined
           : 'A bare domain, with no scheme and no path.'
     }))
 
-  return answered.trim().toLowerCase() || null
+  return normalizeRootDomain(answered)
 }

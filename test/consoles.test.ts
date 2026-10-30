@@ -6,7 +6,7 @@ import { IamApi } from '../src/google/iam'
 import type { TokenProvider } from '../src/google/credential'
 import type { HttpClient } from '../src/http'
 import { setInteractive } from '../src/prompts'
-import { CONSOLE_PRESETS, consolesStep } from '../src/steps/consoles'
+import { CONSOLE_PRESETS, consolesStep, normalizeRootDomain } from '../src/steps/consoles'
 
 // Pinned, not read from the terminal: a test that asks the real stdin passes
 // here and hangs under a pty, which is not a test at all.
@@ -141,5 +141,27 @@ describe('prompting with nobody to answer', () => {
     await expect(consolesStep.apply(context, await consolesStep.plan(context))).rejects.toThrow(
       /not an interactive terminal/
     )
+  })
+})
+
+describe('normalizeRootDomain', () => {
+  test('undefined is nothing, not a crash', () => {
+    // Reported from a real run: the domain prompt had no `defaultValue`, so
+    // pressing Enter resolved to `undefined` and the next `.trim()` threw
+    // "Cannot read properties of undefined". Skipping is a real answer.
+    expect(normalizeRootDomain(undefined)).toBeNull()
+  })
+
+  test('empty and whitespace are nothing too', () => {
+    expect(normalizeRootDomain('')).toBeNull()
+    expect(normalizeRootDomain('   ')).toBeNull()
+  })
+
+  test('trims and lowercases, so one domain cannot become two hosts', () => {
+    expect(normalizeRootDomain('  Example.COM  ')).toBe('example.com')
+  })
+
+  test('leaves a plain domain alone', () => {
+    expect(normalizeRootDomain('luckypick.com')).toBe('luckypick.com')
   })
 })
