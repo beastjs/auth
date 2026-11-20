@@ -53,8 +53,18 @@ function requireInteractive(message: string): void {
 export const intro = (message: string) => clack.intro(message)
 export const outro = (message: string) => clack.outro(message)
 export const note = (body: string, title?: string) => clack.note(body, title)
-export const log = clack.log
-export const spinner = clack.spinner
+
+// Looked up on each call rather than captured at import, like the helpers
+// above, so a test that swaps out `@clack/prompts` reaches these too.
+export const spinner = () => clack.spinner()
+export const log = {
+  info: (message: string) => clack.log.info(message),
+  success: (message: string) => clack.log.success(message),
+  step: (message: string) => clack.log.step(message),
+  warn: (message: string) => clack.log.warn(message),
+  error: (message: string) => clack.log.error(message),
+  message: (message: string) => clack.log.message(message)
+}
 
 export async function select<T>(message: string, options: readonly SelectOption<T>[]): Promise<T> {
   requireInteractive(message)

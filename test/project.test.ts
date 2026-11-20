@@ -20,7 +20,7 @@ describe('validateProjectId', () => {
   })
 
   test('refuses one the account already has, by name', () => {
-    expect(validateProjectId('lucky-pick-345', taken)).toInclude('already have a project')
+    expect(validateProjectId('lucky-pick-345', taken)).toInclude('already taken')
   })
 
   test('refuses what Google would refuse', () => {

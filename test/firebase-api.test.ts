@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { TokenProvider } from '../src/google/credential'
-import { FirebaseApi } from '../src/google/firebase-api'
+import { FirebaseApi, ProjectIdTakenError } from '../src/google/firebase-api'
 import type { HttpClient, HttpRequest, HttpResponse } from '../src/http'
 
 const tokens: TokenProvider = {
@@ -171,5 +171,39 @@ describe('createWebApp', () => {
     await expect(new FirebaseApi(client, tokens).createWebApp('my-app-345', 'my-app')).rejects.toThrow(
       'Quota exceeded for apps per project.'
     )
+  })
+})
+
+describe('createProject when the id is taken', () => {
+  test('a 409 from Resource Manager becomes ProjectIdTakenError, naming the id and why', async () => {
+    const { client } = fakeHttp([
+      { status: 409, ok: false, body: { error: { message: 'Requested entity already exists', status: 'ALREADY_EXISTS' } } }
+    ])
+
+    const failure = await new FirebaseApi(client, tokens).createProject('taken-id-1234', 'Taken').catch((e) => e)
+
+    expect(failure).toBeInstanceOf(ProjectIdTakenError)
+    expect(failure.message).toInclude('taken-id-1234')
+    expect(failure.message).toInclude('unique across all of Google Cloud')
+  })
+
+  test('an operation that fails with ALREADY_EXISTS becomes ProjectIdTakenError too', async () => {
+    const { client } = fakeHttp([
+      ok({ name: 'operations/cp.123' }),
+      ok({ name: 'operations/cp.123', done: true, error: { code: 6, message: 'Requested entity already exists' } })
+    ])
+
+    const failure = await new FirebaseApi(client, tokens).createProject('taken-id-1234', 'Taken').catch((e) => e)
+
+    expect(failure).toBeInstanceOf(ProjectIdTakenError)
+  })
+
+  test('other refusals keep the API wording and are not mistaken for a taken id', async () => {
+    const { client } = fakeHttp([denied('The caller does not have permission')])
+
+    const failure = await new FirebaseApi(client, tokens).createProject('fine-id-1234', 'Fine').catch((e) => e)
+
+    expect(failure).not.toBeInstanceOf(ProjectIdTakenError)
+    expect(failure.message).toBe('The caller does not have permission')
   })
 })

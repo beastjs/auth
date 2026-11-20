@@ -16,7 +16,39 @@ export type FirebaseWebApp = {
   readonly displayName?: string
 }
 
-type Operation = { name?: string; done?: boolean; error?: { message?: string }; response?: unknown }
+type Operation = { name?: string; done?: boolean; error?: { code?: number; message?: string }; response?: unknown }
+
+/** gRPC's ALREADY_EXISTS, which a failed operation reports as a bare number. */
+const ALREADY_EXISTS_CODE = 6
+
+/**
+ * The project id is held by someone — possibly not this account.
+ *
+ * Project ids are global across every Google Cloud customer, and one deleted in
+ * the last thirty days stays reserved, so "you don't have it" is no promise it
+ * is free. Google says only "Requested entity already exists", which reads like
+ * a bug; this names the cause so the prompt can ask for another id.
+ */
+export class ProjectIdTakenError extends Error {
+  constructor(readonly projectId: string) {
+    super(
+      `The project id ${projectId} is already taken. Project ids are unique across all of Google Cloud, ` +
+        'so another account may own it, or it belongs to a project deleted in the last 30 days.'
+    )
+    this.name = 'ProjectIdTakenError'
+  }
+}
+
+/** A failed API call, keeping the status so a caller can tell one refusal from another. */
+class ApiCallError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly apiStatus: string | undefined
+  ) {
+    super(message)
+  }
+}
 
 /**
  * The Firebase Management API, spoken directly.
@@ -42,7 +74,10 @@ export class FirebaseApi {
       bearer: await this.tokens.getAccessToken()
     })
 
-    if (!response.ok) throw new Error(describeHttpError(response))
+    if (!response.ok) {
+      const apiStatus = (response.body as { error?: { status?: string } } | undefined)?.error?.status
+      throw new ApiCallError(describeHttpError(response), response.status, apiStatus)
+    }
 
     return response.body
   }
@@ -54,7 +89,11 @@ export class FirebaseApi {
    * result, and polling too eagerly is how a brand-new project earns a quota
    * complaint, so the interval backs off.
    */
-  private async awaitOperation(operationUrl: string, label: string): Promise<unknown> {
+  private async awaitOperation(
+    operationUrl: string,
+    label: string,
+    onError?: (error: NonNullable<Operation['error']>) => Error | undefined
+  ): Promise<unknown> {
     const deadline = Date.now() + 3 * 60 * 1000
     let waitMs = 1_000
 
@@ -64,7 +103,9 @@ export class FirebaseApi {
 
       const operation = (await this.call(operationUrl)) as Operation
 
-      if (operation.error?.message !== undefined) throw new Error(`${label} failed: ${operation.error.message}`)
+      if (operation.error !== undefined) {
+        throw onError?.(operation.error) ?? new Error(`${label} failed: ${operation.error.message ?? 'no reason given'}`)
+      }
       if (operation.done === true) return operation.response
     }
 
@@ -84,13 +125,23 @@ export class FirebaseApi {
    * running when something goes wrong.
    */
   async createProject(projectId: string, displayName: string): Promise<FirebaseProject> {
-    const created = (await this.call(`${RESOURCE_MANAGER}/projects`, {
-      method: 'POST',
-      body: { projectId, name: displayName }
-    })) as Operation
+    let created: Operation
+    try {
+      created = (await this.call(`${RESOURCE_MANAGER}/projects`, {
+        method: 'POST',
+        body: { projectId, name: displayName }
+      })) as Operation
+    } catch (error) {
+      if (error instanceof ApiCallError && (error.status === 409 || error.apiStatus === 'ALREADY_EXISTS')) {
+        throw new ProjectIdTakenError(projectId)
+      }
+      throw error
+    }
 
     if (created.name === undefined) throw new Error('Google Cloud accepted the project but named no operation.')
-    await this.awaitOperation(`${RESOURCE_MANAGER}/${created.name}`, `Creating ${projectId}`)
+    await this.awaitOperation(`${RESOURCE_MANAGER}/${created.name}`, `Creating ${projectId}`, (error) =>
+      error.code === ALREADY_EXISTS_CODE ? new ProjectIdTakenError(projectId) : undefined
+    )
 
     const added = (await this.call(`${FIREBASE}/projects/${projectId}:addFirebase`, {
       method: 'POST',

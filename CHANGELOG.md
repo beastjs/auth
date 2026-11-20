@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **A taken project id left the run hung.** Project ids are unique across all
+  of Google Cloud, so an id this account doesn't have can still belong to
+  someone else (or to a project deleted in the last 30 days). Google answers
+  with a bare "Requested entity already exists", which was shown as-is while
+  the "Creating…" spinner kept running. Now the spinner stops, the reason is
+  given, and you're asked for another id.
+
 ## 0.1.1
 
 Three bugs on the create-a-project path, all reported from a real run.

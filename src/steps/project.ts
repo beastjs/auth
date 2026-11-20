@@ -1,6 +1,7 @@
 import type { RunContext } from '../context'
 import { NoGoogleCredentialError } from '../google/credential'
 import { reauthenticate } from '../google/firebase-cli'
+import { ProjectIdTakenError } from '../google/firebase-api'
 import * as ui from '../prompts'
 import { emptyPlan, type Step } from '../step'
 
@@ -19,7 +20,7 @@ export function validateProjectId(value: string, taken: ReadonlySet<string>): st
   const candidate = value.trim()
 
   if (candidate.length === 0) return undefined
-  if (taken.has(candidate)) return 'You already have a project with that id.'
+  if (taken.has(candidate)) return 'That id is already taken.'
 
   return PROJECT_ID_PATTERN.test(candidate)
     ? undefined
@@ -111,30 +112,51 @@ export const projectStep: Step = {
       return
     }
 
+    // Grows as Google turns ids down, so the prompt refuses a retry of one it
+    // has already been told is taken.
     const taken = new Set(projects.map((project) => project.projectId))
+    let displayName: string | undefined
 
-    // Suggested once: `suggestProjectId` is random, so calling it for both the
-    // default and the placeholder would show one id and submit another.
-    const suggestion = suggestProjectId(context.app.appSlug)
+    for (;;) {
+      // Suggested once per prompt: `suggestProjectId` is random, so calling it
+      // for both the default and the placeholder would show one id and submit
+      // another. Drawn again after a refusal, in case it was the suggestion
+      // that was taken.
+      const suggestion = suggestProjectId(context.app.appSlug)
 
-    const projectId = await ui.text('Project id', {
-      defaultValue: suggestion,
-      placeholder: suggestion,
-      validate: (value) => validateProjectId(value, taken)
-    })
+      const projectId = (
+        await ui.text('Project id', {
+          defaultValue: suggestion,
+          placeholder: suggestion,
+          validate: (value) => validateProjectId(value, taken)
+        })
+      ).trim()
 
-    const displayName = await ui.text('Display name', { defaultValue: context.app.appSlug })
+      displayName ??= (await ui.text('Display name', { defaultValue: context.app.appSlug })).trim()
 
-    if (projectId.trim().length === 0 || displayName.trim().length === 0) {
-      throw new Error('A project needs an id and a display name.')
+      if (projectId.length === 0 || displayName.length === 0) {
+        throw new Error('A project needs an id and a display name.')
+      }
+
+      const creating = ui.spinner()
+      creating.start(`Creating ${projectId} — this takes a minute`)
+
+      try {
+        const created = await context.api.createProject(projectId, displayName)
+        creating.stop(`Created ${created.projectId}`)
+        context.projectId = created.projectId
+        return
+      } catch (error) {
+        // Stopped either way: a spinner left running keeps drawing over
+        // whatever comes next, which looks like the run has hung.
+        creating.stop(`Could not create ${projectId}`, 2)
+
+        if (!(error instanceof ProjectIdTakenError)) throw error
+
+        ui.log.warn(`${error.message} Choose another id.`)
+        taken.add(projectId)
+      }
     }
-
-    const creating = ui.spinner()
-    creating.start(`Creating ${projectId.trim()} — this takes a minute`)
-    const created = await context.api.createProject(projectId.trim(), displayName.trim())
-    creating.stop(`Created ${created.projectId}`)
-
-    context.projectId = created.projectId
   }
 }
 
