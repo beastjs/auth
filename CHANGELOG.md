@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2
 
 - **A taken project id left the run hung.** Project ids are unique across all
   of Google Cloud, so an id this account doesn't have can still belong to
